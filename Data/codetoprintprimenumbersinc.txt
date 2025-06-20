@@ -1,0 +1,59 @@
+**Printing Prime Numbers in C**
+================================
+
+Here is an example code in C that prints prime numbers up to a given number:
+```c
+#include <stdio.h>
+
+// Function to check if a number is prime
+int is_prime(int num) {
+    if (num <= 1) {
+        return 0;
+    }
+    for (int i = 2; i * i <= num; i++) {
+        if (num % i == 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+// Function to print prime numbers up to a given number
+void print_primes(int n) {
+    printf("Prime numbers up to %d:\n", n);
+    for (int i = 2; i <= n; i++) {
+        if (is_prime(i)) {
+            printf("%d ", i);
+        }
+    }
+    printf("\n");
+}
+
+int main() {
+    int n;
+    printf("Enter a number: ");
+    scanf("%d", &n);
+    print_primes(n);
+    return 0;
+}
+```
+**How the Code Works**
+------------------------
+
+1. The `is_prime` function checks if a number is prime by iterating from 2 to the square root of the number and checking if it is divisible by any of these numbers. If it is, the function returns 0, indicating that the number is not prime.
+2. The `print_primes` function prints prime numbers up to a given number `n`. It iterates from 2 to `n` and checks if each number is prime using the `is_prime` function. If a number is prime, it is printed.
+3. In the `main` function, the user is prompted to enter a number, and then the `print_primes` function is called with this number as an argument.
+
+**Example Output**
+------------------
+
+```
+Enter a number: 20
+Prime numbers up to 20:
+2 3 5 7 11 13 17 19
+```
+**Note**
+--------
+
+* This code uses a simple trial division method to check if a number is prime, which is not the most efficient method for large numbers.
+* For larger numbers, you may want to use a more efficient algorithm, such as the Sieve of Eratosthenes.
