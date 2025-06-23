@@ -96,25 +96,33 @@ def GetWakeTriggerStatus():
 
 def texttospeech(text):
     """
-    Function to speak the given text using edge-tts or any other TTS engine.
-    This example uses edge-tts via subprocess as a placeholder.
-    You can replace this with your actual TTS implementation.
+    Generates speech using edge-tts, saves it to Data/speech.mp3, then plays it.
+    This avoids edge-tts playback errors by separating generation and playback.
     """
     try:
-        # Example using edge-tts CLI (you can adapt as per your TTS setup)
-        # It saves to a temp mp3 and plays using ffplay or similar.
-        # Here is a simple synchronous example:
-        import edge_tts
         import asyncio
+        from edge_tts import Communicate
+        import pygame
+        import os
 
-        async def speak(text):
-            communicate = edge_tts.Communicate(text, "en-CA-LiamNeural")
-            await communicate.play()
+        async def generate_and_play():
+            filepath = "Data/speech.mp3"
+            communicate = Communicate(text=text, voice="en-CA-LiamNeural")
+            await communicate.save(filepath)
 
-        asyncio.run(speak(text))
-        
+            if os.path.exists(filepath):
+                pygame.mixer.init()
+                pygame.mixer.music.load(filepath)
+                pygame.mixer.music.play()
+                while pygame.mixer.music.get_busy():
+                    pygame.time.Clock().tick(10)
+                pygame.mixer.quit()
+
+        asyncio.run(generate_and_play())
+
     except Exception as e:
-        print(f"TTS Error: {e}")
+        print(f"⚠️ TTS Error: {e}")
+
 
 def GetWakeTriggerEnabled():
     """

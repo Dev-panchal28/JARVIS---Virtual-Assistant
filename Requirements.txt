@@ -18,3 +18,10 @@ webdriver-manager
 opencv-python
 SpeechRecognition
 numpy
+dlib
+face_recognition
+pyautogui
+pyttsx3
+psutil
+pycaw
+screen_brightness_control

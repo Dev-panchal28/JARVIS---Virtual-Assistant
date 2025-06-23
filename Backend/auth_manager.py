@@ -5,6 +5,7 @@ import numpy as np
 import face_recognition
 import speech_recognition as sr
 import asyncio
+import pygame
 from edge_tts import Communicate
 from dotenv import dotenv_values
 
@@ -17,20 +18,36 @@ faces_dir = "UserData/faces"
 passwords_dir = "UserData/passwords"
 usernames_file = "UserData/usernames.json"
 active_user_file = "UserData/active_user.json"
+data_dir = "Data"
 os.makedirs(faces_dir, exist_ok=True)
 os.makedirs(passwords_dir, exist_ok=True)
 os.makedirs("UserData", exist_ok=True)
+os.makedirs(data_dir, exist_ok=True)
 
-# === TTS Function using edge-tts ===
-async def speak_async(text):
+# === TTS Handling ===
+async def generate_tts(text: str, filepath="Data/speech.mp3", voice=JARVIS_VOICE_NAME):
     try:
-        communicate = Communicate(text=text, voice=JARVIS_VOICE_NAME)
-        await communicate.play()
+        communicate = Communicate(text=text, voice=voice)
+        await communicate.save(filepath)
     except Exception as e:
-        print(f"⚠️ TTS error: {e}")
+        print(f"⚠️ TTS generation error: {e}")
 
-def speak(text):
-    asyncio.run(speak_async(text))
+def play_audio(filepath):
+    try:
+        pygame.mixer.init()
+        pygame.mixer.music.load(filepath)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(10)
+    except Exception as e:
+        print(f"⚠️ Playback error: {e}")
+    finally:
+        pygame.mixer.quit()
+
+def speak(text: str):
+    asyncio.run(generate_tts(text))
+    play_audio("Data/speech.mp3")
+    play_audio("Data/beep.mp3")
 
 # === Active User Management ===
 def set_active_user(username):
@@ -80,7 +97,6 @@ def register_user(username):
 
         if encodings:
             face_encoding = encodings[0]
-            np.save(f"{faces_dir}/{username}_face.npy", face_encoding)
             print("✅ Face captured successfully.")
             break
 
@@ -94,7 +110,7 @@ def register_user(username):
     cap.release()
     cv2.destroyAllWindows()
 
-    # === Prompt and record voice password (with retry loop) ===
+    # === Prompt and record voice password ===
     recognizer = sr.Recognizer()
     attempt = 0
     max_attempts = 3
@@ -102,7 +118,7 @@ def register_user(username):
 
     while attempt < max_attempts:
         print("🎤 Prompting for voice password...")
-        speak("Say your password now")
+        speak("Say your password after beep")
 
         with sr.Microphone() as source:
             recognizer.energy_threshold = 300
@@ -124,17 +140,23 @@ def register_user(username):
 
     if not password:
         print("❌ Failed to capture valid voice password.")
+        # Clean up any face data saved by accident
+        face_file = f"{faces_dir}/{username}_face.npy"
+        if os.path.exists(face_file):
+            os.remove(face_file)
         return False
 
+    # === Save data only now ===
+    np.save(f"{faces_dir}/{username}_face.npy", face_encoding)
     with open(f"{passwords_dir}/{username}_password.txt", "w") as f:
         f.write(password)
-
     usernames.append(username)
     with open(usernames_file, 'w') as f:
         json.dump(usernames, f)
 
     print("🎉 User registration complete.")
     return True
+
 
 # === Face Verification ===
 def verify_face(username):
@@ -187,7 +209,8 @@ def verify_password(username):
     max_attempts = 3
 
     while attempt < max_attempts:
-        speak("Please say your password")
+        speak("Please say your password now")
+
         with sr.Microphone() as source:
             recognizer.energy_threshold = 300
             recognizer.pause_threshold = 1.0
