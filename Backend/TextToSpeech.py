@@ -22,7 +22,9 @@ def TTS(text: str, interrupt_check=lambda: True):
     try:
         asyncio.run(TextToAudioFile(text, file_path))
 
-        pygame.mixer.init()
+        if not pygame.mixer.get_init():  # ✅ Check before init
+            pygame.mixer.init()
+
         pygame.mixer.music.load(file_path)
         pygame.mixer.music.play()
 
@@ -38,10 +40,12 @@ def TTS(text: str, interrupt_check=lambda: True):
 
     finally:
         try:
-            pygame.mixer.music.stop()
-            pygame.mixer.quit()
+            if pygame.mixer.get_init():  # ✅ Check before cleanup
+                pygame.mixer.music.stop()
+                pygame.mixer.quit()
         except Exception as e:
             print(f"Cleanup error: {e}")
+
 
 # Main entry point to handle long text smartly with chunking
 def TextToSpeech(text: str, interrupt_check=lambda: True):

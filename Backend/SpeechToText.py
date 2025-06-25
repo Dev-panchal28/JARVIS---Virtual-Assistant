@@ -76,6 +76,7 @@ chrome_options.add_argument(f'user-agent={user_agent}')
 chrome_options.add_argument("--use-fake-ui-for-media-stream")
 chrome_options.add_argument("--use-fake-device-for-media-stream")
 chrome_options.add_argument("--headless=new")  # Remove this line to debug in visible browser
+chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
 service = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=service, options=chrome_options)

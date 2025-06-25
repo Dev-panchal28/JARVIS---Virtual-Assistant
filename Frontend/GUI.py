@@ -1,7 +1,9 @@
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTextEdit, QStackedWidget, QWidget, QLineEdit,QGraphicsOpacityEffect,
-    QGridLayout, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QLabel, QSizePolicy
+    QGridLayout, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QLabel, QSizePolicy,QMessageBox
 )
+from PyQt5.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout, QHBoxLayout
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QPainter, QMovie, QColor, QTextCharFormat, QFont, QPixmap, QTextBlockFormat
 from PyQt5.QtCore import Qt, QSize, QTimer,QPropertyAnimation
 from dotenv import dotenv_values
@@ -10,7 +12,10 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import subprocess
 import pygame
+import json
+from pathlib import Path
 from Backend.Settings import show_settings_menu
+from Backend.auth_manager import get_active_user
 
 
 env_vars = dotenv_values(".env")
@@ -19,6 +24,8 @@ current_dir = os.getcwd()
 old_chat_message = ""
 TempDirPath = rf"{current_dir}\Frontend\Files"
 GraphicsDirPath = rf"{current_dir}\Frontend\Graphics"
+ACTIVE_USER_PATH = Path("UserData/active_user.json")
+
 
 
 def AnswerModifier(Answer):
@@ -351,18 +358,64 @@ class InitialScreen(QWidget):
         self.timer.start(5)
 
         # === SETTINGS BUTTON ===
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.SpeechRecogText)
+        self.timer.start(5)
+
+        # === SETTINGS BUTTON ===
         self.settings_button = QPushButton(self)
         settings_icon = QIcon(GraphicsDirectoryPath('Settings.png'))
         self.settings_button.setIcon(settings_icon)
         self.settings_button.setIconSize(QSize(60, 60))
         self.settings_button.setStyleSheet("background-color: transparent; border: none;")
         self.settings_button.setFixedSize(60, 60)
-        self.settings_button.clicked.connect(lambda: show_settings_menu(self.settings_button))
+        self.settings_button.clicked.connect(lambda: show_settings_menu(self.settings_button, self.update_profile_icon))
+
+        # === USER PROFILE LABEL ===
+        self.profile_label = QLabel(self)
+        self.profile_label.setStyleSheet("""
+            background-color: white;
+            color: black;
+            border-radius: 15px;
+            font-weight: bold;
+            font-size: 16px;
+        """)
+        self.profile_label.setFixedSize(40, 40)
+        self.profile_label.setAlignment(Qt.AlignCenter)
+        self.profile_label.hide()
+
+        # === Load active user ===
+        from pathlib import Path
+        ACTIVE_USER_PATH = Path("UserData/active_user.json")
+        if ACTIVE_USER_PATH.exists():
+            try:
+                with open(ACTIVE_USER_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    username = (data.get("username") or "").strip()
+                    if username:
+                        self.profile_label.setText(username[0].upper())
+                        self.profile_label.show()
+            except Exception as e:
+                print(f"[User Icon] Failed to read active_user.json: {e}")
 
         QTimer.singleShot(0, self.position_settings_icon)
 
+
     def position_settings_icon(self):
         self.settings_button.move(self.width() - 80, 20)
+        self.profile_label.move(self.width() - 130, 25)
+        self.profile_label.raise_()  # Make sure it's on top
+    
+    def update_profile_icon(self, username):
+        if username:
+            self.profile_label.setText(username[0].upper())
+            self.profile_label.show()
+            self.profile_label.raise_()
+        else:
+            self.profile_label.hide()
+
+
+
 
     def SpeechRecogText(self):
         with open(TempDirectoryPath('Status.data'), "r", encoding='utf-8') as file:
@@ -418,7 +471,50 @@ class InitialScreen(QWidget):
 
         self.animation.finished.connect(QApplication.quit)
 
+
     def launch_game_launcher(self, event):
+        # Check if user is logged in
+        try:
+            with open("UserData/active_user.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+                username = data.get("username", "").strip()
+        except Exception:
+            username = ""
+
+        if not username:
+            # Styled warning box for dark background
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Login Required")
+            msg.setText("Login to use this feature.")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: #121212;
+                    color: white;
+                    font-size: 14px;
+                }
+                QLabel {
+                    color: white;
+                    font-size: 14px;
+                    background-color: transparent;
+                }
+                QMessageBox QLabel {
+                    min-width: 200px;
+                }
+                QPushButton {
+                    background-color: #2e2e2e;
+                    color: white;
+                    padding: 6px;
+                }
+                QPushButton:hover {
+                    background-color: #3c3c3c;
+                }
+            """)
+
+            msg.exec_()
+            return
+
+        # Proceed to launch game if logged in
         self.setWindowTitle("Game Launcher")
         if self.game_launcher_process is None or self.game_launcher_process.poll() is not None:
             script_path = os.path.join(os.getcwd(), "GameLauncher", "launcher.py")
@@ -435,6 +531,7 @@ class InitialScreen(QWidget):
                         w.activate()
             except Exception as e:
                 print("Could not focus Game Launcher window:", e)
+
 
 
 
@@ -568,8 +665,55 @@ class CustomTopBar(QWidget):
         self.current_screen = initial_screen
 
 
-class MainWindow(QMainWindow):
+class ExitDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Exit")
+        self.setFixedSize(300, 120)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #202020;
+                color: white;
+                border: 2px solid #007acc;
+            }
+            QLabel {
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #007acc;
+                color: white;
+                padding: 6px 14px;
+                border: none;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #005f99;
+            }
+        """)
 
+        layout = QVBoxLayout()
+        label = QLabel("Are you sure you want to exit?")
+        label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
+
+        button_layout = QHBoxLayout()
+        self.yes_button = QPushButton("Yes")
+        self.no_button = QPushButton("No")
+
+        button_layout.addStretch()
+        button_layout.addWidget(self.yes_button)
+        button_layout.addWidget(self.no_button)
+        button_layout.addStretch()
+
+        layout.addWidget(label)
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+
+        self.yes_button.clicked.connect(self.accept)
+        self.no_button.clicked.connect(self.reject)
+
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint)
@@ -590,13 +734,29 @@ class MainWindow(QMainWindow):
         self.setMenuWidget(top_bar)
         self.setCentralWidget(stacked_widget)
 
+    def closeEvent(self, event):
+        dialog = ExitDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            try:
+                if pygame.mixer.get_init():
+                    pygame.mixer.quit()
+                QApplication.quit()
+                event.accept()
+            except Exception as e:
+                print(f"⚠️ Error during exit: {e}")
+                event.ignore()
+        else:
+            event.ignore()
+
+
+
 
 def GraphicalUserInterface():
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec_())
-    return app,window
+    app.exec_()
+
 
 
 if __name__ == "__main__":

@@ -13,18 +13,20 @@ from dotenv import dotenv_values
 env_vars = dotenv_values(".env")
 JARVIS_VOICE_NAME = env_vars.get("AssistantVoice")
 
-# === Directories ===
-faces_dir = "UserData/faces"
-passwords_dir = "UserData/passwords"
-usernames_file = "UserData/usernames.json"
-active_user_file = "UserData/active_user.json"
-data_dir = "Data"
-os.makedirs(faces_dir, exist_ok=True)
-os.makedirs(passwords_dir, exist_ok=True)
+# === Directories and Files ===
+os.makedirs("UserData/faces", exist_ok=True)
+os.makedirs("UserData/passwords", exist_ok=True)
 os.makedirs("UserData", exist_ok=True)
-os.makedirs(data_dir, exist_ok=True)
+os.makedirs("Data", exist_ok=True)
 
-# === TTS Handling ===
+FACES_DIR = "UserData/faces"
+PASSWORDS_DIR = "UserData/passwords"
+USERNAMES_FILE = "UserData/usernames.json"
+ACTIVE_USER_FILE = "UserData/active_user.json"
+
+
+
+# === TTS ===
 async def generate_tts(text: str, filepath="Data/speech.mp3", voice=JARVIS_VOICE_NAME):
     try:
         communicate = Communicate(text=text, voice=voice)
@@ -49,60 +51,69 @@ def speak(text: str):
     play_audio("Data/speech.mp3")
     play_audio("Data/beep.mp3")
 
-# === Active User Management ===
+# === Active User ===
 def set_active_user(username):
-    with open(active_user_file, "w", encoding="utf-8") as f:
+    with open(ACTIVE_USER_FILE, "w", encoding="utf-8") as f:
         json.dump({"username": username}, f)
 
 def get_active_user():
     try:
-        with open(active_user_file, "r", encoding="utf-8") as f:
+        with open(ACTIVE_USER_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data.get("username")
-    except (FileNotFoundError, json.JSONDecodeError):
+            return data.get("username") if data.get("username") else None
+    except:
         return None
 
+
 def clear_active_user():
-    if os.path.exists(active_user_file):
-        os.remove(active_user_file)
+    with open(ACTIVE_USER_FILE, "w", encoding="utf-8") as f:
+        json.dump({"username": None}, f)
 
-# === User Registration ===
-def register_user(username):
-    if os.path.exists(usernames_file):
-        with open(usernames_file, 'r') as f:
-            try:
-                usernames = json.load(f)
-            except json.JSONDecodeError:
-                usernames = []
-    else:
-        usernames = []
 
-    if username in usernames:
+# === User Management ===
+def load_usernames():
+    if not os.path.exists(USERNAMES_FILE):
+        return []
+    try:
+        with open(USERNAMES_FILE, "r") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        return []
+
+def save_username(username):
+    usernames = load_usernames()
+    usernames.append(username)
+    with open(USERNAMES_FILE, "w") as f:
+        json.dump(usernames, f)
+
+# === Signup Flow ===
+def signup_flow(username):
+    if username in load_usernames():
         print("⚠️ Username already exists.")
         return False
 
-    # === Capture face ===
+    # === Face Capture ===
     cap = cv2.VideoCapture(0)
-    print("📸 Capturing face. Please look at the camera...")
-
+    print("📸 Capturing face. Look at the camera...")
     face_encoding = None
+
     while True:
         ret, frame = cap.read()
         if not ret:
             continue
 
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        boxes = face_recognition.face_locations(rgb_frame)
-        encodings = face_recognition.face_encodings(rgb_frame, boxes)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        boxes = face_recognition.face_locations(rgb)
+        encodings = face_recognition.face_encodings(rgb, boxes)
 
         if encodings:
             face_encoding = encodings[0]
-            print("✅ Face captured successfully.")
+            print("✅ Face captured.")
             break
 
         cv2.imshow("Capturing Face", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            print("❌ Face capture canceled.")
+            print("❌ Cancelled.")
             cap.release()
             cv2.destroyAllWindows()
             return False
@@ -110,61 +121,52 @@ def register_user(username):
     cap.release()
     cv2.destroyAllWindows()
 
-    # === Prompt and record voice password ===
+    # === Voice Password ===
     recognizer = sr.Recognizer()
-    attempt = 0
-    max_attempts = 3
     password = None
-
-    while attempt < max_attempts:
-        print("🎤 Prompting for voice password...")
+    for attempt in range(3):
         speak("Say your password after beep")
-
         with sr.Microphone() as source:
-            recognizer.energy_threshold = 300
-            recognizer.pause_threshold = 1.0
             recognizer.adjust_for_ambient_noise(source, duration=1)
             try:
                 audio = recognizer.listen(source, timeout=5)
                 password = recognizer.recognize_google(audio).strip()
                 print(f"✅ Password captured: {password}")
                 break
-            except sr.WaitTimeoutError:
-                print("⏰ Timeout: No voice detected.")
-            except sr.UnknownValueError:
-                print("❌ Could not understand your speech.")
-            except sr.RequestError:
-                print("❌ Speech recognition service error.")
-        attempt += 1
-        speak("Please try again")
+            except:
+                print("❌ Try again.")
+                speak("Please try again")
 
     if not password:
-        print("❌ Failed to capture valid voice password.")
-        # Clean up any face data saved by accident
-        face_file = f"{faces_dir}/{username}_face.npy"
-        if os.path.exists(face_file):
-            os.remove(face_file)
+        print("❌ Failed to capture password.")
         return False
 
-    # === Save data only now ===
-    np.save(f"{faces_dir}/{username}_face.npy", face_encoding)
-    with open(f"{passwords_dir}/{username}_password.txt", "w") as f:
+    np.save(f"{FACES_DIR}/{username}_face.npy", face_encoding)
+    with open(f"{PASSWORDS_DIR}/{username}_password.txt", "w") as f:
         f.write(password)
-    usernames.append(username)
-    with open(usernames_file, 'w') as f:
-        json.dump(usernames, f)
+    save_username(username)
 
-    print("🎉 User registration complete.")
+    print("🎉 Signup successful.")
     return True
 
-
-# === Face Verification ===
-def verify_face(username):
-    face_path = f"{faces_dir}/{username}_face.npy"
-    if not os.path.exists(face_path):
-        print("❌ No face data found for this user.")
+# === Login Flow ===
+def login_flow(username):
+    active = get_active_user()
+    if active:
+        print(f"⚠️ Another user '{active}' is already logged in.")
+        return False
+    if username not in load_usernames():
+        print("❌ Username not found.")
         return False
 
+    face_path = f"{FACES_DIR}/{username}_face.npy"
+    pass_path = f"{PASSWORDS_DIR}/{username}_password.txt"
+
+    if not os.path.exists(face_path) or not os.path.exists(pass_path):
+        print("❌ Missing data.")
+        return False
+
+    # === Face Verification ===
     known_encoding = np.load(face_path)
     cap = cv2.VideoCapture(0)
     print("🔍 Verifying face...")
@@ -175,16 +177,14 @@ def verify_face(username):
         if not ret:
             continue
 
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        boxes = face_recognition.face_locations(rgb_frame)
-        encodings = face_recognition.face_encodings(rgb_frame, boxes)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        boxes = face_recognition.face_locations(rgb)
+        encodings = face_recognition.face_encodings(rgb, boxes)
 
-        if encodings:
-            distance = face_recognition.face_distance([known_encoding], encodings[0])[0]
-            if distance < 0.5:
-                match = True
-                print("✅ Face verified.")
-                break
+        if encodings and face_recognition.face_distance([known_encoding], encodings[0])[0] < 0.5:
+            match = True
+            print("✅ Face verified.")
+            break
 
         cv2.imshow("Verifying Face", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -192,67 +192,39 @@ def verify_face(username):
 
     cap.release()
     cv2.destroyAllWindows()
-    return match
-
-# === Voice Password Verification ===
-def verify_password(username):
-    password_file = f"{passwords_dir}/{username}_password.txt"
-    if not os.path.exists(password_file):
-        print("❌ No password found for this user.")
+    if not match:
+        print("❌ Face mismatch.")
         return False
 
-    with open(password_file, "r") as f:
+    # === Voice Password ===
+    with open(pass_path, "r") as f:
         stored_password = f.read().strip()
 
     recognizer = sr.Recognizer()
-    attempt = 0
-    max_attempts = 3
-
-    while attempt < max_attempts:
-        speak("Please say your password now")
-
+    for attempt in range(3):
+        speak("Please say your password after beep")
         with sr.Microphone() as source:
-            recognizer.energy_threshold = 300
-            recognizer.pause_threshold = 1.0
             recognizer.adjust_for_ambient_noise(source, duration=1)
             try:
                 audio = recognizer.listen(source, timeout=5)
-                spoken_password = recognizer.recognize_google(audio).strip()
-                print(f"🔐 You said: {spoken_password}")
-
-                if spoken_password.lower() == stored_password.lower():
+                spoken = recognizer.recognize_google(audio).strip()
+                print(f"🔐 You said: {spoken}")
+                if spoken.lower() == stored_password.lower():
                     print("✅ Password matched.")
+                    set_active_user(username)
                     return True
-                else:
-                    print("❌ Incorrect password.")
-            except sr.WaitTimeoutError:
-                print("⏰ Timeout: No voice detected.")
-            except sr.UnknownValueError:
-                print("❌ Could not understand speech.")
-            except sr.RequestError:
-                print("❌ Speech recognition error.")
-        attempt += 1
-        speak("Try again")
+            except:
+                print("❌ Try again.")
+                speak("Try again")
 
-    print("❌ Failed password verification.")
+    print("❌ Voice verification failed.")
     return False
 
-# === Full Verification Flow ===
-def verify_user(username):
-    if verify_face(username) and verify_password(username):
-        set_active_user(username)
-        print(f"🔓 User '{username}' logged in and set as active user.")
+def logout_flow():
+    if get_active_user():
+        clear_active_user()
+        print("👋 Logged out successfully.")
         return True
     else:
-        print("❌ Verification failed.")
+        print("⚠️ No active user to log out.")
         return False
-
-# === Load usernames ===
-def load_usernames():
-    if not os.path.exists(usernames_file):
-        return []
-    with open(usernames_file, 'r') as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []

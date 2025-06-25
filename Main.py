@@ -56,7 +56,6 @@ def GetCurrentChatLogPath():
             pass
     return "Data/ChatLog.json"
 
-
 def sanitize_for_tts(text):
     return re.sub(r"[^a-zA-Z0-9\s.,!?]", "", text)
 
