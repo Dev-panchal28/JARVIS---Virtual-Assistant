@@ -137,9 +137,28 @@ def MainExecution():
 
     for q in Decision:
         if "generate " in q:
+            # Check for active user
+            try:
+                with open("UserData/active_user.json", "r", encoding="utf-8") as f:
+                    user = json.load(f).get("username", "").strip()
+            except Exception:
+                user = ""
+
+            if not user:
+                msg = "Please login to use image generation."
+                ShowTextToScreen(f"{Assistantname} : {msg}")
+                SetAssistantStatus("Answering...")
+                TextToSpeech(sanitize_for_tts(msg))
+                return
+
             with open("Frontend/Files/ImageGeneration.data", "w") as file:
                 file.write(f"{q},True")
-            ShowTextToScreen(f"{Assistantname} : Generating images. Please wait...")
+            msg = "Generating images. Please wait..."
+            ShowTextToScreen(f"{Assistantname} : {msg}")
+            SetAssistantStatus("Answering...")
+            TextToSpeech(sanitize_for_tts(msg))
+            return
+
 
     for q in Decision:
         if any(q.startswith(func) for func in Functions):
