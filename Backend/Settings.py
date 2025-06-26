@@ -1,10 +1,12 @@
+# === Imports ===
 from PyQt5.QtWidgets import (
     QMenu, QAction, QInputDialog, QApplication, QLineEdit, QMessageBox
 )
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from ctypes import cast, POINTER
 from comtypes import CLSCTX_ALL
-# ===== CUSTOM AUTH MANAGER =====
+
+# === Custom Authentication Manager ===
 from Backend.auth_manager import (
     signup_flow as register_user,
     login_flow as verify_user,
@@ -14,41 +16,49 @@ from Backend.auth_manager import (
     get_active_user
 )
 
-# ===== SETTINGS CLASSES =====
+# === Settings Classes ===
+
 class AudioSettings:
     def __init__(self):
-        self.volume_muted = False
+        self.volume_muted = False  # Tracks mute state
 
 class AccountSettings:
     def __init__(self):
-        self.logged_in = bool(get_active_user())
-        self.username = get_active_user() or ""
+        self.logged_in = bool(get_active_user())  # True if user is logged in
+        self.username = get_active_user() or ""   # Store logged-in username
 
-# ===== SETTINGS MANAGER =====
+# === Global Settings Manager ===
+
 class SettingsManager:
     def __init__(self):
         self.audio = AudioSettings()
         self.account = AccountSettings()
 
     def update(self, category: str, key: str, value):
+        """Dynamically update settings values."""
         section = getattr(self, category, None)
         if section and hasattr(section, key):
             setattr(section, key, value)
             return True
         return False
 
+# Create global instance
 settings_manager = SettingsManager()
 
-# ===== Audio Control =====
+# === Audio Control Function ===
+
 def set_system_mute(mute: bool):
+    """Mute or unmute the system volume using pycaw."""
     devices = AudioUtilities.GetSpeakers()
     interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
     volume = cast(interface, POINTER(IAudioEndpointVolume))
     volume.SetMute(1 if mute else 0, None)
     settings_manager.update("audio", "volume_muted", mute)
 
-# ===== Fixed Black Theme Styles =====
+# === Theming & Styling ===
+
 def get_menu_stylesheet():
+    """Dark theme style for all menus."""
     return """
     QMenu {
         background-color: #1e1e1e;
@@ -68,6 +78,7 @@ def get_menu_stylesheet():
     """
 
 def themed_input_dialog(parent, title, label):
+    """Create a dark-themed input dialog."""
     dialog = QInputDialog(parent)
     dialog.setWindowTitle(title)
     dialog.setLabelText(label)
@@ -85,6 +96,7 @@ def themed_input_dialog(parent, title, label):
     return dialog.textValue(), ok
 
 def show_message_box(parent, title, text, icon=QMessageBox.Information):
+    """Display a styled message box."""
     msg_box = QMessageBox(parent)
     msg_box.setIcon(icon)
     msg_box.setWindowTitle(title)
@@ -110,13 +122,14 @@ def show_message_box(parent, title, text, icon=QMessageBox.Information):
     """)
     msg_box.exec_()
 
+# === Main Settings Menu ===
 
-# ===== MAIN SETTINGS MENU =====
 def show_settings_menu(parent_button, profile_callback=None):
+    """Build and show the settings menu."""
     main_menu = QMenu(parent_button)
     main_menu.setStyleSheet(get_menu_stylesheet())
 
-    # ===== Volume Submenu =====
+    # === Volume Submenu ===
     volume_menu = QMenu("Volume Setting")
     volume_menu.setStyleSheet(get_menu_stylesheet())
 
@@ -129,10 +142,11 @@ def show_settings_menu(parent_button, profile_callback=None):
     volume_menu.addAction(mute_action)
     volume_menu.addAction(unmute_action)
 
-    # ===== Account Submenu =====
+    # === Account Submenu ===
     account_menu = QMenu("Account")
     account_menu.setStyleSheet(get_menu_stylesheet())
 
+    # --- Signup Action ---
     signup_action = QAction("Signup", account_menu)
     def signup():
         username, ok = themed_input_dialog(parent_button, "Signup", "Enter new username:")
@@ -152,6 +166,7 @@ def show_settings_menu(parent_button, profile_callback=None):
                 show_message_box(parent_button, "Signup Failed", "Username already registered or capture failed.", QMessageBox.Warning)
     signup_action.triggered.connect(signup)
 
+    # --- Login Action ---
     login_action = QAction("Login", account_menu)
     def login():
         if settings_manager.account.logged_in:
@@ -176,6 +191,7 @@ def show_settings_menu(parent_button, profile_callback=None):
                 show_message_box(parent_button, "Login Failed", "Authentication failed. Try again.", QMessageBox.Warning)
     login_action.triggered.connect(login)
 
+    # --- Logout Action ---
     logout_action = QAction("Logout", account_menu)
     def logout():
         if settings_manager.account.logged_in:
@@ -189,17 +205,18 @@ def show_settings_menu(parent_button, profile_callback=None):
             show_message_box(parent_button, "Logout", "No user is currently logged in.", QMessageBox.Warning)
     logout_action.triggered.connect(logout)
 
-    # Enable/Disable login/logout depending on current state
+    # Enable/Disable login/logout buttons based on login state
     login_action.setEnabled(not settings_manager.account.logged_in)
     logout_action.setEnabled(settings_manager.account.logged_in)
 
+    # Add actions to account menu
     account_menu.addAction(signup_action)
     account_menu.addAction(login_action)
     account_menu.addAction(logout_action)
 
-    # ===== Add submenus to main menu =====
+    # Add submenus to main settings menu
     main_menu.addMenu(volume_menu)
     main_menu.addMenu(account_menu)
 
-    # ===== Show the menu =====
+    # Show the menu at button's bottom-right position
     main_menu.exec_(parent_button.mapToGlobal(parent_button.rect().bottomRight()))

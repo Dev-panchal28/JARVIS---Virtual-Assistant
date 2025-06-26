@@ -1,3 +1,8 @@
+# ============================================
+# File: auth_manager.py
+# Purpose: Handles face + voice-based signup/login authentication
+# ============================================
+
 import os
 import json
 import cv2
@@ -13,21 +18,24 @@ from dotenv import dotenv_values
 env_vars = dotenv_values(".env")
 JARVIS_VOICE_NAME = env_vars.get("AssistantVoice")
 
-# === Directories and Files ===
+# === Directory Setup ===
 os.makedirs("UserData/faces", exist_ok=True)
 os.makedirs("UserData/passwords", exist_ok=True)
 os.makedirs("UserData", exist_ok=True)
 os.makedirs("Data", exist_ok=True)
 
+# === File Paths ===
 FACES_DIR = "UserData/faces"
 PASSWORDS_DIR = "UserData/passwords"
 USERNAMES_FILE = "UserData/usernames.json"
 ACTIVE_USER_FILE = "UserData/active_user.json"
 
+# ============================================
+# Section: Text-to-Speech Handling
+# ============================================
 
-
-# === TTS ===
 async def generate_tts(text: str, filepath="Data/speech.mp3", voice=JARVIS_VOICE_NAME):
+    """Generate TTS audio using edge-tts and save to file."""
     try:
         communicate = Communicate(text=text, voice=voice)
         await communicate.save(filepath)
@@ -35,6 +43,7 @@ async def generate_tts(text: str, filepath="Data/speech.mp3", voice=JARVIS_VOICE
         print(f"⚠️ TTS generation error: {e}")
 
 def play_audio(filepath):
+    """Play the given audio file using pygame."""
     try:
         pygame.mixer.init()
         pygame.mixer.music.load(filepath)
@@ -47,11 +56,15 @@ def play_audio(filepath):
         pygame.mixer.quit()
 
 def speak(text: str):
+    """Convert text to speech and play it along with a beep sound."""
     asyncio.run(generate_tts(text))
     play_audio("Data/speech.mp3")
     play_audio("Data/beep.mp3")
 
-# === Active User ===
+# ============================================
+# Section: Active User Management
+# ============================================
+
 def set_active_user(username):
     with open(ACTIVE_USER_FILE, "w", encoding="utf-8") as f:
         json.dump({"username": username}, f)
@@ -64,13 +77,14 @@ def get_active_user():
     except:
         return None
 
-
 def clear_active_user():
     with open(ACTIVE_USER_FILE, "w", encoding="utf-8") as f:
         json.dump({"username": None}, f)
 
+# ============================================
+# Section: User Storage & Retrieval
+# ============================================
 
-# === User Management ===
 def load_usernames():
     if not os.path.exists(USERNAMES_FILE):
         return []
@@ -86,13 +100,16 @@ def save_username(username):
     with open(USERNAMES_FILE, "w") as f:
         json.dump(usernames, f)
 
-# === Signup Flow ===
+# ============================================
+# Section: Signup Process
+# ============================================
+
 def signup_flow(username):
     if username in load_usernames():
         print("⚠️ Username already exists.")
         return False
 
-    # === Face Capture ===
+    # === Step 1: Capture Face ===
     cap = cv2.VideoCapture(0)
     print("📸 Capturing face. Look at the camera...")
     face_encoding = None
@@ -121,7 +138,7 @@ def signup_flow(username):
     cap.release()
     cv2.destroyAllWindows()
 
-    # === Voice Password ===
+    # === Step 2: Capture Voice Password ===
     recognizer = sr.Recognizer()
     password = None
     for attempt in range(3):
@@ -141,6 +158,7 @@ def signup_flow(username):
         print("❌ Failed to capture password.")
         return False
 
+    # === Save Face + Voice Data ===
     np.save(f"{FACES_DIR}/{username}_face.npy", face_encoding)
     with open(f"{PASSWORDS_DIR}/{username}_password.txt", "w") as f:
         f.write(password)
@@ -149,12 +167,16 @@ def signup_flow(username):
     print("🎉 Signup successful.")
     return True
 
-# === Login Flow ===
+# ============================================
+# Section: Login Process
+# ============================================
+
 def login_flow(username):
     active = get_active_user()
     if active:
         print(f"⚠️ Another user '{active}' is already logged in.")
         return False
+
     if username not in load_usernames():
         print("❌ Username not found.")
         return False
@@ -166,12 +188,12 @@ def login_flow(username):
         print("❌ Missing data.")
         return False
 
-    # === Face Verification ===
+    # === Step 1: Verify Face ===
     known_encoding = np.load(face_path)
     cap = cv2.VideoCapture(0)
     print("🔍 Verifying face...")
-
     match = False
+
     for _ in range(50):
         ret, frame = cap.read()
         if not ret:
@@ -192,11 +214,12 @@ def login_flow(username):
 
     cap.release()
     cv2.destroyAllWindows()
+
     if not match:
         print("❌ Face mismatch.")
         return False
 
-    # === Voice Password ===
+    # === Step 2: Verify Voice Password ===
     with open(pass_path, "r") as f:
         stored_password = f.read().strip()
 
@@ -219,6 +242,10 @@ def login_flow(username):
 
     print("❌ Voice verification failed.")
     return False
+
+# ============================================
+# Section: Logout
+# ============================================
 
 def logout_flow():
     if get_active_user():
