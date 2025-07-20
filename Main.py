@@ -86,12 +86,12 @@ def ChatLogIntegration():
         file.write(AnswerModifier(formatted))
 
 def ShowChatsOnGUI():
-    with open(TempDirectoryPath('Database.data'), "r", encoding='utf-8') as file:
-        data = file.read()
+    with open(TempDirectoryPath('Database.data'), "r", encoding='utf-8') as f:
+        data = f.read()
     if data.strip():
-        with open(TempDirectoryPath('Responses.data'), "w", encoding='utf-8') as file:
-            file.write(data)
-
+        with open(TempDirectoryPath('Responses.data'), "w", encoding='utf-8') as f:
+            f.write(data)
+            
 def InitialExecution():
     SetMicrophoneStatus("False")
     ShowTextToScreen("")

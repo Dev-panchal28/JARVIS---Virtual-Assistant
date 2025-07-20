@@ -38,7 +38,7 @@ def is_wake_word_enabled():
 def listen_for_wake_word(callback=None, wake_words=None):
     """Continuously listen for the wake word and trigger a callback."""
     if wake_words is None:
-        wake_words = ["hello"]
+        wake_words = ["hey jarvis"]
 
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
